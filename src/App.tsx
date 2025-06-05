@@ -77,17 +77,21 @@ function App() {
   function playNote(noteFrequency: number) {
     if (oscillatorsRef.current) {
       oscillatorsRef.current.forEach((osc) => {
-        gainNodeRef.current?.gain.cancelScheduledValues(audioContextRef.current?.currentTime);
-        gainNodeRef.current?.gain.setValueAtTime(0, audioContextRef.current?.currentTime);
-        osc.frequency.value = noteFrequency;
-        gainNodeRef.current?.gain.linearRampToValueAtTime(gainValue, audioContextRef.current?.currentTime  + attack);
-        console.log('Freq:', osc.frequency.value);
+        if (audioContextRef.current) {
+          gainNodeRef.current?.gain.cancelScheduledValues(audioContextRef.current.currentTime);
+          gainNodeRef.current?.gain.setValueAtTime(0, audioContextRef.current.currentTime);
+          osc.frequency.value = noteFrequency;
+          gainNodeRef.current?.gain.linearRampToValueAtTime(gainValue, audioContextRef.current.currentTime + attack);
+          console.log('Freq:', osc.frequency.value);
+        }
       });
     }
   }
 
   function releaseNote() {
-    gainNodeRef.current?.gain.linearRampToValueAtTime(0, audioContextRef.current?.currentTime  + release);
+    if (audioContextRef.current && gainNodeRef.current) {
+      gainNodeRef.current.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + release);
+    }
     }
 
 
