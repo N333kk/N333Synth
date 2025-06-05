@@ -185,6 +185,8 @@ function App() {
               <span className="w-3 h-3 bg-green-500 rounded-full mr-3"></span>
               Audio Controls
             </h3>
+
+            <p className="text-sm text-zinc-400">(use a low gain)</p>
             <div className="space-y-6">
               <div className="space-y-2">
                 <label htmlFor="volume" className="text-zinc-300 text-sm font-medium block">
@@ -208,7 +210,7 @@ function App() {
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
                 onClick={startOscillators}
               >
-                🎵 Test Audio
+                🎵 Start Osc's
               </button>
             </div>
           </div>

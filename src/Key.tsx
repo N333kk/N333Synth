@@ -28,6 +28,8 @@ function Key({ keyName, isBlack = false, frequency, onPress, onRelease }: KeyPro
       className="bg-white rounded-b-xl hover:bg-gray-100 border border-gray-300 text-black font-medium w-12 h-32 relative transition-all duration-75 active:scale-95 shadow-md"
       onMouseDown={() => onPress(frequency)}
       onMouseUp={() => onRelease()}
+      onTouchStart={() => onPress(frequency)}
+      onTouchEnd={() => onRelease()}
     >
       <span className="absolute bottom-2 text-xs text-gray-600">
         {keyName}
