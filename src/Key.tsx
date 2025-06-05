@@ -13,6 +13,8 @@ function Key({ keyName, isBlack = false, frequency, onPress, onRelease }: KeyPro
         className="absolute bg-gray-900 hover:bg-gray-800 text-white font-medium w-8 h-20 -ml-4 z-10 transition-all duration-75 active:scale-95 shadow-lg rounded-b-md"
         onMouseDown={() => onPress(frequency)}
         onMouseUp={() => onRelease()}
+        onTouchStart={() => onPress(frequency)}
+        onTouchEnd={() => onRelease()}
       >
         <span className="absolute bottom-1 text-xs opacity-80">
           {keyName}
