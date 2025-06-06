@@ -2,55 +2,75 @@ import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import Key from "./Key";
 
-function App() {
-  const [gainValue, setGainValue] = useState(0.05);
+function App() {  const [gainValue, setGainValue] = useState(0.05);
   const [octave, setOctave] = useState(0);
   const [frequency, setFrequency] = useState(0); // For Fine Tuning
   const [attack, setAttack] = useState(0);
   const [decay, setDecay] = useState(0);
   const [sustain, setSustain] = useState(0);
   const [release, setRelease] = useState(0);
+  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
 
   // Referencias para mantener los nodos de audio estables
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const oscillatorsRef = useRef<OscillatorNode[]>([]);
-
   // Inicializar el contexto de audio y los nodos una sola vez
   useEffect(() => {
-    const ctx = new AudioContext();
-    const oscillator = ctx.createOscillator();
-    const oscillator2 = ctx.createOscillator();
-    const oscillators = [oscillator, oscillator2];
-    const gainNode = ctx.createGain();
+    const initAudio = () => {
+      const ctx = new AudioContext();
+      const oscillator = ctx.createOscillator();
+      const oscillator2 = ctx.createOscillator();
+      const oscillators = [oscillator, oscillator2];
+      const gainNode = ctx.createGain();
 
-    oscillator.detune.value = -15;
-    oscillator2.detune.value = 25;
+      oscillator.detune.value = -15;
+      oscillator2.detune.value = 25;
 
-    oscillators.forEach((osc) => {
-      osc.type = "square"; // Set the oscillator type
-      osc.frequency.value = 120; // Default frequency (A4)
-      osc.connect(gainNode);
-    });
-
-    gainNode.connect(ctx.destination);
-
-    // Guardar las referencias
-    audioContextRef.current = ctx;
-    gainNodeRef.current = gainNode;
-    oscillatorsRef.current = oscillators;
-
-    // Cleanup function
-    return () => {
-      oscillators.forEach(osc => {
-        try {
-          osc.stop();
-          osc.disconnect();
-        } catch (e) {
-          // Ignorar errores si el oscillator ya está parado
-        }
+      oscillators.forEach((osc) => {
+        osc.type = "square"; // Set the oscillator type
+        osc.frequency.value = 120; // Default frequency (A4)
+        osc.connect(gainNode);
       });
-      ctx.close();
+
+      gainNode.connect(ctx.destination);
+
+      // Guardar las referencias
+      audioContextRef.current = ctx;
+      gainNodeRef.current = gainNode;
+      oscillatorsRef.current = oscillators;
+    };
+
+    // Inicializar inmediatamente
+    initAudio();
+
+    // Para móviles, también manejar el primer toque del usuario
+    const handleFirstInteraction = () => {
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+      document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('click', handleFirstInteraction);
+    };
+
+    document.addEventListener('touchstart', handleFirstInteraction);
+    document.addEventListener('click', handleFirstInteraction);    // Cleanup function
+    return () => {
+      if (oscillatorsRef.current) {
+        oscillatorsRef.current.forEach(osc => {
+          try {
+            osc.stop();
+            osc.disconnect();
+          } catch {
+            // Ignorar errores si el oscillator ya está parado
+          }
+        });
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('click', handleFirstInteraction);
     };
   }, []);
 
@@ -60,21 +80,30 @@ function App() {
       gainNodeRef.current.gain.value = gainValue;
     }
   }, [gainValue]);
-
-  
   function startOscillators() {
     if (oscillatorsRef.current) {
       oscillatorsRef.current.forEach((osc) => {
         try {
           osc.start();
-        } catch (e) {
+        } catch {
           // Ignorar errores si el oscillator ya está iniciado
         }
       });
     }
   }
 
+  function initializeAudio() {
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+    startOscillators();
+  }
   function playNote(noteFrequency: number) {
+    // Resumir contexto de audio si está suspendido (importante para móviles)
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+    
     if (oscillatorsRef.current) {
       oscillatorsRef.current.forEach((osc) => {
         if (audioContextRef.current) {
@@ -92,21 +121,23 @@ function App() {
     if (audioContextRef.current && gainNodeRef.current) {
       gainNodeRef.current.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + release);
     }
-    }
+  }
 
 
   return (
-    <>
-      <div className="bg-zinc-900 border border-zinc-700 p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">N333 Synth</h1>
-          <p className="text-zinc-400">Fine Tuning, Sustain and Decay currently not working, lemme rest lol</p>
-          <p className="text-zinc-400">Only 2 detuned squares, will be adding other sounds</p>
+    <>      <div className="bg-zinc-900 border border-zinc-700 p-4 sm:p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto">
+        {/* Header */}        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">N333 Synth</h1>
+          <p className="text-zinc-400 text-sm sm:text-base">WebSynth</p>
+          <div className="mt-2 p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
+            <p className="text-blue-300 text-xs sm:text-sm">
+            <span className="font-semibold"></span> Press Start Osc's And then play the keys.
+            </p>
+          </div>
         </div>
 
         {/* Main Controls Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
           
           {/* ADSR Section */}
           <div className="bg-zinc-800 border border-zinc-600 p-6 rounded-xl">
@@ -204,11 +235,9 @@ function App() {
                   className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
                 />
                 <div className="text-xs text-zinc-400 text-center">{gainValue.toFixed(2)}</div>
-              </div>
-
-              <button
+              </div>              <button
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
-                onClick={startOscillators}
+                onClick={initializeAudio}
               >
                 🎵 Start Osc's
               </button>
@@ -255,15 +284,14 @@ function App() {
             </div>
           </div>
         </div>
-      </div>
-      {/* Piano Roll */}
-      <div className="mt-8 bg-zinc-900 border border-zinc-700 p-6 rounded-2xl shadow-2xl max-w-6xl mx-auto">
-        <h3 className="text-white text-lg font-semibold mb-6 flex items-center">
+      </div>      {/* Piano Roll */}
+      <div className="mt-4 sm:mt-8 bg-zinc-900 border border-zinc-700 p-4 sm:p-6 rounded-2xl shadow-2xl max-w-6xl mx-auto">
+        <h3 className="text-white text-lg font-semibold mb-4 sm:mb-6 flex items-center">
           <span className="w-3 h-3 bg-purple-500 rounded-full mr-3"></span>
-          Piano (3 Octavas)
+          Piano Roll
         </h3>
-          <div className="flex justify-center">
-          <div className="relative">
+          <div className="flex justify-center overflow-x-auto">
+          <div className="relative min-w-max">
             {/* Teclas blancas */}
             <div className="flex">
               {Array.from({ length: 21 }, (_, i) => {
@@ -292,18 +320,16 @@ function App() {
                 const whiteKeys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
                 const keyName = whiteKeys[i % 7];
                 const octaveNum = Math.floor(i / 7) + octave;
-                
-                if (!['C', 'D', 'F', 'G', 'A'].includes(keyName)) {
-                  return <div key={`spacer-${i}`} className="w-12"></div>;
+                  if (!['C', 'D', 'F', 'G', 'A'].includes(keyName)) {
+                  return <div key={`spacer-${i}`} className="w-8 sm:w-12"></div>;
                 }
                 
                 const sharpNote = keyName + '#' + octaveNum;
                 const blackKeyOffsets = { 'C#': 1, 'D#': 3, 'F#': 6, 'G#': 8, 'A#': 10 };
                 const midiNumber = (octaveNum + 2) * 12 + blackKeyOffsets[keyName + '#' as keyof typeof blackKeyOffsets];
                 const noteFrequency = 440 * Math.pow(2, (midiNumber - 69) / 12) + frequency;
-                
-                return (
-                  <div key={`container-${i}`} className="relative w-12">
+                  return (
+                  <div key={`container-${i}`} className="relative w-8 sm:w-12">
                     <Key
                       keyName={sharpNote}
                       isBlack={true}
@@ -317,9 +343,8 @@ function App() {
             </div>
           </div>
         </div>
-        
-        <div className="mt-4 text-center text-zinc-400 text-sm">
-          Midi Not Implemented Yet
+          <div className="mt-4 text-center text-zinc-400 text-sm">
+          Toca las teclas para reproducir las notas • Optimizado para móvil
         </div>
       </div>
       <div>

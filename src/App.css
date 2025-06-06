@@ -3,8 +3,37 @@
 #root {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
   text-align: center;
+}
+
+/* Mejoras específicas para móvil */
+@media (max-width: 640px) {
+  #root {
+    padding: 0.5rem;
+  }
+  
+  body {
+    touch-action: manipulation; /* Prevenir zoom en doble tap */
+    -webkit-touch-callout: none; /* Deshabilitar menú contextual en iOS */
+    -webkit-user-select: none; /* Deshabilitar selección de texto */
+    user-select: none;
+  }
+}
+
+/* Prevenir zoom y scroll accidental en elementos interactivos */
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input[type="range"] {
+  touch-action: manipulation;
+}
+
+/* Mejorar la experiencia táctil */
+.touch-manipulation {
+  touch-action: manipulation;
 }
 
 /* Custom slider styles */
