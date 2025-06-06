@@ -2,43 +2,45 @@ import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import Key from "./Key";
 
-function App() {  const [gainValue, setGainValue] = useState(0.05);
+// Interfaz para una voz individual
+interface Voice {
+  oscillators: OscillatorNode[];
+  gainNode: GainNode;
+  frequency: number;
+  keyName: string;
+  isReleasing: boolean;
+  startTime: number;
+}
+
+function App() {
+  const [gainValue, setGainValue] = useState(0.05);
   const [octave, setOctave] = useState(0);
   const [frequency, setFrequency] = useState(0); // For Fine Tuning
-  const [attack, setAttack] = useState(0);
-  const [decay, setDecay] = useState(0);
-  const [sustain, setSustain] = useState(0);
-  const [release, setRelease] = useState(0);
-  //const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
+  const [attack, setAttack] = useState(0.1);
+  const [decay, setDecay] = useState(0.3);
+  const [sustain, setSustain] = useState(0.7);
+  const [release, setRelease] = useState(0.5);
+  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
 
   // Referencias para mantener los nodos de audio estables
   const audioContextRef = useRef<AudioContext | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
-  const oscillatorsRef = useRef<OscillatorNode[]>([]);
-  // Inicializar el contexto de audio y los nodos una sola vez
+  const masterGainNodeRef = useRef<GainNode | null>(null);
+  const activeVoicesRef = useRef<Map<string, Voice>>(new Map()); // Map de voces activas
+  const isInitializedRef = useRef(false);
+  // Inicializar el contexto de audio una sola vez
   useEffect(() => {
     const initAudio = () => {
       const ctx = new AudioContext();
-      const oscillator = ctx.createOscillator();
-      const oscillator2 = ctx.createOscillator();
-      const oscillators = [oscillator, oscillator2];
-      const gainNode = ctx.createGain();
-
-      oscillator.detune.value = -15;
-      oscillator2.detune.value = 25;
-
-      oscillators.forEach((osc) => {
-        osc.type = "square"; // Set the oscillator type
-        osc.frequency.value = 120; // Default frequency (A4)
-        osc.connect(gainNode);
-      });
-
-      gainNode.connect(ctx.destination);
+      const masterGain = ctx.createGain();
+      
+      // Conectar el gain master al destino
+      masterGain.connect(ctx.destination);
+      masterGain.gain.value = gainValue;
 
       // Guardar las referencias
       audioContextRef.current = ctx;
-      gainNodeRef.current = gainNode;
-      oscillatorsRef.current = oscillators;
+      masterGainNodeRef.current = masterGain;
+      isInitializedRef.current = true;
     };
 
     // Inicializar inmediatamente
@@ -54,82 +56,221 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
     };
 
     document.addEventListener('touchstart', handleFirstInteraction);
-    document.addEventListener('click', handleFirstInteraction);    // Cleanup function
+    document.addEventListener('click', handleFirstInteraction);
+
+    // Cleanup function
     return () => {
-      if (oscillatorsRef.current) {
-        oscillatorsRef.current.forEach(osc => {
-          try {
-            osc.stop();
-            osc.disconnect();
-          } catch {
-            // Ignorar errores si el oscillator ya está parado
-          }
-        });
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      // Capturar la referencia actual para usar en el cleanup
+      const currentActiveVoices = activeVoicesRef.current;
+      const currentAudioContext = audioContextRef.current;
+      
+      // Limpiar todas las voces activas
+      currentActiveVoices.forEach((voice) => {
+        cleanupVoice(voice);
+      });
+      currentActiveVoices.clear();
+      
+      if (currentAudioContext) {
+        currentAudioContext.close();
       }
       document.removeEventListener('touchstart', handleFirstInteraction);
       document.removeEventListener('click', handleFirstInteraction);
     };
-  }, []);  // Actualizar el gain cada vez que gainValue cambie
+  }, [gainValue]); // Incluir gainValue como dependencia
+
+  // Actualizar el master gain cada vez que gainValue cambie
   useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = gainValue;
+    if (masterGainNodeRef.current) {
+      masterGainNodeRef.current.gain.value = gainValue;
     }
   }, [gainValue]);
-  function startOscillators() {
-    if (oscillatorsRef.current) {
-      oscillatorsRef.current.forEach((osc) => {
-        try {
-          osc.start();
-        } catch {
-          // Ignorar errores si el oscillator ya está iniciado
-        }
-      });
+
+  // Función para limpiar una voz
+  const cleanupVoice = (voice: Voice) => {
+    voice.oscillators.forEach(osc => {
+      try {
+        osc.stop();
+        osc.disconnect();
+      } catch {
+        // Ignorar errores si el oscillator ya está parado
+      }
+    });
+    try {
+      voice.gainNode.disconnect();
+    } catch {
+      // Ignorar errores
     }
-  }
+  };
+
+  // Función para crear una nueva voz
+  const createVoice = (noteFrequency: number, keyName: string): Voice => {
+    if (!audioContextRef.current || !masterGainNodeRef.current) {
+      throw new Error("Audio context not initialized");
+    }
+
+    const ctx = audioContextRef.current;
+    
+    // Crear dos oscilladores para esta voz (para que suene más rico)
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    
+    // Crear gain node para esta voz específica
+    const voiceGain = ctx.createGain();
+    
+    // Configurar oscilladores
+    osc1.type = "square";
+    osc2.type = "square";
+    osc1.frequency.value = noteFrequency;
+    osc2.frequency.value = noteFrequency;
+    
+    // Detuning para sonido más rico
+    osc1.detune.value = -15;
+    osc2.detune.value = 25;
+    
+    // Conectar oscilladores al gain de la voz
+    osc1.connect(voiceGain);
+    osc2.connect(voiceGain);
+    
+    // Conectar el gain de la voz al master gain
+    voiceGain.connect(masterGainNodeRef.current);
+    
+    // Inicializar el gain en 0 para el envelope
+    voiceGain.gain.value = 0;
+    
+    return {
+      oscillators: [osc1, osc2],
+      gainNode: voiceGain,
+      frequency: noteFrequency,
+      keyName,
+      isReleasing: false,
+      startTime: ctx.currentTime
+    };
+  };
+
+  // Función para aplicar el envelope ADSR a una voz
+  const applyADSR = (voice: Voice, isRelease: boolean = false) => {
+    if (!audioContextRef.current) return;
+    
+    const ctx = audioContextRef.current;
+    const currentTime = ctx.currentTime;
+    const gainNode = voice.gainNode;
+    
+    // Cancelar cualquier automatización programada
+    gainNode.gain.cancelScheduledValues(currentTime);
+    
+    if (isRelease) {
+      // Fase de Release
+      const currentGain = gainNode.gain.value;
+      gainNode.gain.setValueAtTime(currentGain, currentTime);
+      gainNode.gain.linearRampToValueAtTime(0, currentTime + release);
+      
+      // Programar la limpieza de la voz después del release
+      setTimeout(() => {
+        cleanupVoice(voice);
+        activeVoicesRef.current.delete(voice.keyName);
+        setActiveKeys(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(voice.keyName);
+          return newSet;
+        });
+      }, release * 1000 + 100); // Un poco extra para asegurar que termine
+      
+    } else {
+      // Fases Attack, Decay, Sustain
+      gainNode.gain.setValueAtTime(0, currentTime);
+      
+      // Attack: 0 -> 1 en tiempo de attack
+      gainNode.gain.linearRampToValueAtTime(1, currentTime + attack);
+      
+      // Decay: 1 -> sustain level en tiempo de decay
+      gainNode.gain.linearRampToValueAtTime(sustain, currentTime + attack + decay);
+      
+      // Sustain: mantener el nivel de sustain (esto se mantiene hasta el release)
+    }
+  };
 
   function initializeAudio() {
     if (audioContextRef.current?.state === 'suspended') {
       audioContextRef.current.resume();
     }
-    startOscillators();
   }
-  function playNote(noteFrequency: number) {
+  function playNote(noteFrequency: number, keyName?: string) {
     // Resumir contexto de audio si está suspendido (importante para móviles)
     if (audioContextRef.current?.state === 'suspended') {
       audioContextRef.current.resume();
     }
     
-    if (oscillatorsRef.current) {
-      oscillatorsRef.current.forEach((osc) => {
-        if (audioContextRef.current) {
-          gainNodeRef.current?.gain.cancelScheduledValues(audioContextRef.current.currentTime);
-          gainNodeRef.current?.gain.setValueAtTime(0, audioContextRef.current.currentTime);
-          osc.frequency.value = noteFrequency;
-          gainNodeRef.current?.gain.linearRampToValueAtTime(gainValue, audioContextRef.current.currentTime + attack);
-          console.log('Freq:', osc.frequency.value);
-        }
+    if (!audioContextRef.current || !isInitializedRef.current) {
+      console.warn("Audio context not initialized");
+      return;
+    }
+
+    // Usar la frecuencia como identificador si no se proporciona keyName
+    const voiceKey = keyName || noteFrequency.toString();
+    
+    // Verificar si ya existe una voz para esta tecla
+    const existingVoice = activeVoicesRef.current.get(voiceKey);
+    
+    if (existingVoice) {
+      // Si la voz existe y está en release, la interrumpimos y creamos una nueva
+      if (existingVoice.isReleasing) {
+        console.log(`Interrupting release for: ${voiceKey}`);
+        cleanupVoice(existingVoice);
+        activeVoicesRef.current.delete(voiceKey);
+      } else {
+        // Si la voz está activa y no en release, no hacer nada
+        return;
+      }
+    }
+    
+    try {
+      // Crear nueva voz
+      const voice = createVoice(noteFrequency, voiceKey);
+      
+      // Iniciar los oscilladores
+      voice.oscillators.forEach(osc => {
+        osc.start();
       });
+      
+      // Aplicar envelope ADSR
+      applyADSR(voice);
+      
+      // Guardar la voz activa
+      activeVoicesRef.current.set(voiceKey, voice);
+      setActiveKeys(prev => new Set(prev).add(voiceKey));
+      
+      console.log(`Voice started: ${voiceKey} - Freq: ${noteFrequency.toFixed(2)}Hz`);
+    } catch (error) {
+      console.error("Error creating voice:", error);
     }
   }
-
-  function releaseNote() {
-    if (audioContextRef.current && gainNodeRef.current) {
-      gainNodeRef.current.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + release);
+  function releaseNote(keyName?: string, noteFrequency?: number) {
+    const voiceKey = keyName || noteFrequency?.toString() || '';
+    const voice = activeVoicesRef.current.get(voiceKey);
+    
+    if (voice && !voice.isReleasing) {
+      voice.isReleasing = true;
+      applyADSR(voice, true);
+      console.log(`Voice released: ${voiceKey}`);
     }
   }
-
 
   return (
-    <>      <div className="bg-zinc-900 border border-zinc-700 p-4 sm:p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto">
-        {/* Header */}        <div className="mb-6 sm:mb-8">
+    <>
+      <div className="bg-zinc-900 border border-zinc-700 p-4 sm:p-8 rounded-2xl shadow-2xl max-w-6xl mx-auto">        {/* Header */}
+        <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">N333 Synth</h1>
-          <p className="text-zinc-400 text-sm sm:text-base">WebSynth</p>
+          <p className="text-zinc-400 text-sm sm:text-base">WebSynth with Polyphony</p>
           <div className="mt-2 p-3 bg-blue-900/30 border border-blue-500/30 rounded-lg">
             <p className="text-blue-300 text-xs sm:text-sm">
-            <span className="font-semibold"></span> Press Start Osc's And then play the keys.
+              Now supports multiple notes at once!
+            </p>
+          </div>
+          
+          {/* Active voices indicator */}
+          <div className="mt-2 p-2 bg-green-900/30 border border-green-500/30 rounded-lg">
+            <p className="text-green-300 text-xs">
+              Active voices: {activeKeys.size} | Keys: {Array.from(activeKeys).join(', ')}
             </p>
           </div>
         </div>
@@ -146,40 +287,42 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label htmlFor="attack" className="text-zinc-300 text-sm font-medium block">
-                  Attack
+                  Attack ({attack.toFixed(2)}s)
                 </label>
                 <input
-                  type="number"
+                  type="range"
                   name="attack"
                   id="attack"
                   onChange={(e) => setAttack(parseFloat(e.target.value))}
                   min="0"
+                  max="2"
                   step="0.01"
                   value={attack}
-                  className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
                 />
               </div>
               <div className="space-y-2">
                 <label htmlFor="decay" className="text-zinc-300 text-sm font-medium block">
-                  Decay
+                  Decay ({decay.toFixed(2)}s)
                 </label>
                 <input
-                  type="number"
+                  type="range"
                   name="decay"
                   id="decay"
                   onChange={(e) => setDecay(parseFloat(e.target.value))}
                   min="0"
+                  max="2"
                   step="0.01"
                   value={decay}
-                  className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
                 />
               </div>
               <div className="space-y-2">
                 <label htmlFor="sustain" className="text-zinc-300 text-sm font-medium block">
-                  Sustain
+                  Sustain ({sustain.toFixed(2)})
                 </label>
                 <input
-                  type="number"
+                  type="range"
                   name="sustain"
                   id="sustain"
                   onChange={(e) => setSustain(parseFloat(e.target.value))}
@@ -187,22 +330,23 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
                   max="1"
                   step="0.01"
                   value={sustain}
-                  className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
                 />
               </div>
               <div className="space-y-2">
                 <label htmlFor="release" className="text-zinc-300 text-sm font-medium block">
-                  Release
+                  Release ({release.toFixed(2)}s)
                 </label>
                 <input
-                  type="number"
+                  type="range"
                   name="release"
                   id="release"
                   onChange={(e) => setRelease(parseFloat(e.target.value))}
                   min="0"
+                  max="3"
                   step="0.01"
                   value={release}
-                  className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
                 />
               </div>
             </div>
@@ -215,11 +359,10 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
               Audio Controls
             </h3>
 
-            <p className="text-sm text-zinc-400">(use a low gain)</p>
             <div className="space-y-6">
               <div className="space-y-2">
                 <label htmlFor="volume" className="text-zinc-300 text-sm font-medium block">
-                  Gain
+                  Master Gain
                 </label>
                 <input
                   type="range"
@@ -227,17 +370,19 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
                   id="volume"
                   onChange={(e) => setGainValue(parseFloat(e.target.value))}
                   min="0"
-                  max="1"
+                  max="0.3"
                   step="0.01"
                   value={gainValue}
                   className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
                 />
-                <div className="text-xs text-zinc-400 text-center">{gainValue.toFixed(2)}</div>
-              </div>              <button
+                <div className="text-xs text-zinc-400 text-center">{gainValue.toFixed(3)}</div>
+              </div>
+
+              <button
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
                 onClick={initializeAudio}
               >
-                🎵 Start Osc's
+                🎵 Initialize Audio Context
               </button>
             </div>
           </div>
@@ -247,7 +392,9 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
             <h3 className="text-white text-lg font-semibold mb-4 flex items-center">
               <span className="w-3 h-3 bg-orange-500 rounded-full mr-3"></span>
               Tuning
-            </h3>            <div className="space-y-4">              <div className="space-y-2">
+            </h3>
+            <div className="space-y-4">
+              <div className="space-y-2">
                 <label className="text-zinc-300 text-sm font-medium block">
                   Octave
                 </label>
@@ -276,7 +423,7 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
                   type="number"
                   name="frequency"
                   id="frequency"
-                  onChange={(e) => setFrequency(parseFloat(e.target.value))}
+                  onChange={(e) => setFrequency(parseFloat(e.target.value) || 0)}
                   step="1"
                   value={frequency}
                   className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
@@ -285,12 +432,15 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
             </div>
           </div>
         </div>
-      </div>      {/* Piano Roll */}
-      <div className="mt-4 sm:mt-8 bg-zinc-900 border border-zinc-700 p-4 sm:p-6 rounded-2xl shadow-2xl max-w-6xl mx-auto">        <h3 className="text-white text-lg font-semibold mb-4 sm:mb-6 flex items-center">
+      </div>
+
+      {/* Piano Roll */}
+      <div className="mt-4 sm:mt-8 bg-zinc-900 border border-zinc-700 p-4 sm:p-6 rounded-2xl shadow-2xl max-w-6xl mx-auto">
+        <h3 className="text-white text-lg font-semibold mb-4 sm:mb-6 flex items-center">
           <span className="w-3 h-3 bg-purple-500 rounded-full mr-3"></span>
-          Piano Roll
+          Piano Roll - Polyphonic
         </h3>
-          <div className="flex justify-center overflow-x-auto">
+        <div className="flex justify-center overflow-x-auto">
           <div className="relative min-w-max">
             {/* Teclas blancas */}
             <div className="flex">
@@ -301,13 +451,14 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
                 const whiteKeyMidiOffsets = [0, 2, 4, 5, 7, 9, 11];
                 const midiNumber = (octaveNum + 2) * 12 + whiteKeyMidiOffsets[i % 7];
                 const noteFrequency = 440 * Math.pow(2, (midiNumber - 69) / 12) + frequency;
-                  return (
+                
+                return (
                   <Key
                     key={`white-${keyName}-oct${octave}-freq${frequency}`}
                     keyName={keyName}
                     frequency={noteFrequency}
-                    onPress={playNote}
-                    onRelease={releaseNote}
+                    onPress={(freq) => playNote(freq, keyName)}
+                    onRelease={() => releaseNote(keyName)}
                   />
                 );
               })}
@@ -318,21 +469,25 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
               {Array.from({ length: 21 }, (_, i) => {
                 const whiteKeys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
                 const keyName = whiteKeys[i % 7];
-                const octaveNum = Math.floor(i / 7) + octave;                  if (!['C', 'D', 'F', 'G', 'A'].includes(keyName)) {
+                const octaveNum = Math.floor(i / 7) + octave;
+
+                if (!['C', 'D', 'F', 'G', 'A'].includes(keyName)) {
                   return <div key={`spacer-${i}-oct${octave}`} className="w-8 sm:w-12"></div>;
                 }
                 
                 const sharpNote = keyName + '#' + octaveNum;
                 const blackKeyOffsets = { 'C#': 1, 'D#': 3, 'F#': 6, 'G#': 8, 'A#': 10 };
                 const midiNumber = (octaveNum + 2) * 12 + blackKeyOffsets[keyName + '#' as keyof typeof blackKeyOffsets];
-                const noteFrequency = 440 * Math.pow(2, (midiNumber - 69) / 12) + frequency;                  return (
+                const noteFrequency = 440 * Math.pow(2, (midiNumber - 69) / 12) + frequency;
+
+                return (
                   <div key={`container-${i}-oct${octave}-freq${frequency}`} className="relative w-8 sm:w-12">
                     <Key
                       keyName={sharpNote}
                       isBlack={true}
                       frequency={noteFrequency}
-                      onPress={playNote}
-                      onRelease={releaseNote}
+                      onPress={(freq) => playNote(freq, sharpNote)}
+                      onRelease={() => releaseNote(sharpNote)}
                     />
                   </div>
                 );
@@ -340,10 +495,11 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
             </div>
           </div>
         </div>
-          <div className="mt-4 text-center text-zinc-400 text-sm">
-          Lots of things not working yet, sustain and decay, fine tuning, midi still not implemented, im on it!
+        <div className="mt-4 text-center text-zinc-400 text-sm">
+          Gotta add MIDI support, right?
         </div>
       </div>
+      
       <div>
         <p className="text-center text-zinc-500 text-xs mt-4">
           Made with ❤️ by <a href="https://github.com/N333kk">N333KK</a>

@@ -2,39 +2,39 @@ interface KeyProps {
   keyName: string;
   isBlack?: boolean;
   frequency: number;
-  onPress: (freq: number) => void;
-  onRelease: () => void;
+  onPress: (freq: number, keyName?: string) => void;
+  onRelease: (keyName?: string) => void;
 }
 
 function Key({ keyName, isBlack = false, frequency, onPress, onRelease }: KeyProps) {
   const handleTouchStart = (e: React.TouchEvent) => {
     e.preventDefault(); // Prevenir scroll y zoom
-    onPress(frequency);
+    onPress(frequency, keyName);
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     e.preventDefault(); // Prevenir scroll y zoom
-    onRelease();
+    onRelease(keyName);
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    onPress(frequency);
+    onPress(frequency, keyName);
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
     e.preventDefault();
-    onRelease();
+    onRelease(keyName);
   };
 
   // Manejar cuando el usuario mueve el dedo fuera de la tecla
   const handleTouchCancel = (e: React.TouchEvent) => {
     e.preventDefault();
-    onRelease();
+    onRelease(keyName);
   };
 
   const handleMouseLeave = () => {
-    onRelease();
+    onRelease(keyName);
   };
 
   if (isBlack) {
