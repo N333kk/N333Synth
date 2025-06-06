@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import "./App.css";
 import Key from "./Key";
 
@@ -10,6 +10,7 @@ interface Voice {
   keyName: string;
   isReleasing: boolean;
   startTime: number;
+  cleanupTimeoutId?: number;
 }
 
 function App() {
@@ -19,15 +20,49 @@ function App() {
   const [attack, setAttack] = useState(0.1);
   const [decay, setDecay] = useState(0.3);
   const [sustain, setSustain] = useState(0.7);
-  const [release, setRelease] = useState(0.5);
-  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
+  const [release, setRelease] = useState(0.5);  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
 
   // Referencias para mantener los nodos de audio estables
   const audioContextRef = useRef<AudioContext | null>(null);
-  const masterGainNodeRef = useRef<GainNode | null>(null);
-  const activeVoicesRef = useRef<Map<string, Voice>>(new Map()); // Map de voces activas
+  const masterGainNodeRef = useRef<GainNode | null>(null);  const activeVoicesRef = useRef<Map<string, Voice>>(new Map()); // Map de voces activas
   const isInitializedRef = useRef(false);
-  // Inicializar el contexto de audio una sola vez
+  
+  // Función para limpiar una voz (usando useCallback para evitar recreación)
+  const cleanupVoice = useCallback((voice: Voice) => {
+    // Marcar como limpiada para evitar doble cleanup
+    if (voice.isReleasing && voice.gainNode.gain.value === 0) {
+      return;
+    }
+    
+    voice.oscillators.forEach(osc => {
+      try {
+        if (osc.context.state !== 'closed') {
+          osc.stop();
+        }
+        osc.disconnect();
+      } catch {
+        // Ignorar errores si el oscillator ya está parado
+      }
+    });
+    try {
+      voice.gainNode.disconnect();
+    } catch {
+      // Ignorar errores
+    }
+  }, []);
+  
+  // Función de emergencia para detener todas las voces
+  const stopAllVoices = () => {
+    console.log("Emergency stop - cleaning all voices");
+    activeVoicesRef.current.forEach((voice) => {
+      if (voice.cleanupTimeoutId) {
+        clearTimeout(voice.cleanupTimeoutId);
+      }
+      cleanupVoice(voice);
+    });
+    activeVoicesRef.current.clear();
+    setActiveKeys(new Set());
+  };  // Inicializar el contexto de audio una sola vez
   useEffect(() => {
     const initAudio = () => {
       const ctx = new AudioContext();
@@ -56,16 +91,17 @@ function App() {
     };
 
     document.addEventListener('touchstart', handleFirstInteraction);
-    document.addEventListener('click', handleFirstInteraction);
-
-    // Cleanup function
+    document.addEventListener('click', handleFirstInteraction);    // Cleanup function
     return () => {
-      // Capturar la referencia actual para usar en el cleanup
+      // Necesitamos acceder a la referencia actual para limpiar las voces activas
       const currentActiveVoices = activeVoicesRef.current;
       const currentAudioContext = audioContextRef.current;
       
       // Limpiar todas las voces activas
       currentActiveVoices.forEach((voice) => {
+        if (voice.cleanupTimeoutId) {
+          clearTimeout(voice.cleanupTimeoutId);
+        }
         cleanupVoice(voice);
       });
       currentActiveVoices.clear();
@@ -76,31 +112,13 @@ function App() {
       document.removeEventListener('touchstart', handleFirstInteraction);
       document.removeEventListener('click', handleFirstInteraction);
     };
-  }, [gainValue]); // Incluir gainValue como dependencia
+  }, [gainValue, cleanupVoice]); // Incluir gainValue y cleanupVoice como dependencias
 
   // Actualizar el master gain cada vez que gainValue cambie
   useEffect(() => {
     if (masterGainNodeRef.current) {
-      masterGainNodeRef.current.gain.value = gainValue;
-    }
+      masterGainNodeRef.current.gain.value = gainValue;    }
   }, [gainValue]);
-
-  // Función para limpiar una voz
-  const cleanupVoice = (voice: Voice) => {
-    voice.oscillators.forEach(osc => {
-      try {
-        osc.stop();
-        osc.disconnect();
-      } catch {
-        // Ignorar errores si el oscillator ya está parado
-      }
-    });
-    try {
-      voice.gainNode.disconnect();
-    } catch {
-      // Ignorar errores
-    }
-  };
 
   // Función para crear una nueva voz
   const createVoice = (noteFrequency: number, keyName: string): Voice => {
@@ -146,7 +164,6 @@ function App() {
       startTime: ctx.currentTime
     };
   };
-
   // Función para aplicar el envelope ADSR a una voz
   const applyADSR = (voice: Voice, isRelease: boolean = false) => {
     if (!audioContextRef.current) return;
@@ -163,17 +180,22 @@ function App() {
       const currentGain = gainNode.gain.value;
       gainNode.gain.setValueAtTime(currentGain, currentTime);
       gainNode.gain.linearRampToValueAtTime(0, currentTime + release);
-      
-      // Programar la limpieza de la voz después del release
-      setTimeout(() => {
-        cleanupVoice(voice);
-        activeVoicesRef.current.delete(voice.keyName);
-        setActiveKeys(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(voice.keyName);
-          return newSet;
-        });
+        // Programar la limpieza de la voz después del release
+      const timeoutId = setTimeout(() => {
+        // Verificar que la voz todavía existe antes de limpiarla
+        if (activeVoicesRef.current.has(voice.keyName)) {
+          cleanupVoice(voice);
+          activeVoicesRef.current.delete(voice.keyName);
+          setActiveKeys(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(voice.keyName);
+            return newSet;
+          });
+        }
       }, release * 1000 + 100); // Un poco extra para asegurar que termine
+      
+      // Guardar el timeout ID en la voz para poder cancelarlo si es necesario
+      voice.cleanupTimeoutId = timeoutId;
       
     } else {
       // Fases Attack, Decay, Sustain
@@ -193,8 +215,7 @@ function App() {
     if (audioContextRef.current?.state === 'suspended') {
       audioContextRef.current.resume();
     }
-  }
-  function playNote(noteFrequency: number, keyName?: string) {
+  }  function playNote(noteFrequency: number, keyName?: string) {
     // Resumir contexto de audio si está suspendido (importante para móviles)
     if (audioContextRef.current?.state === 'suspended') {
       audioContextRef.current.resume();
@@ -211,16 +232,15 @@ function App() {
     // Verificar si ya existe una voz para esta tecla
     const existingVoice = activeVoicesRef.current.get(voiceKey);
     
-    if (existingVoice) {
-      // Si la voz existe y está en release, la interrumpimos y creamos una nueva
-      if (existingVoice.isReleasing) {
-        console.log(`Interrupting release for: ${voiceKey}`);
-        cleanupVoice(existingVoice);
-        activeVoicesRef.current.delete(voiceKey);
-      } else {
-        // Si la voz está activa y no en release, no hacer nada
-        return;
+    if (existingVoice) {      // Cancelar cualquier timeout de cleanup pendiente
+      if (existingVoice.cleanupTimeoutId) {
+        clearTimeout(existingVoice.cleanupTimeoutId);
       }
+      
+      // Limpiar la voz existente inmediatamente
+      console.log(`Replacing existing voice for: ${voiceKey}`);
+      cleanupVoice(existingVoice);
+      activeVoicesRef.current.delete(voiceKey);
     }
     
     try {
@@ -243,8 +263,7 @@ function App() {
     } catch (error) {
       console.error("Error creating voice:", error);
     }
-  }
-  function releaseNote(keyName?: string, noteFrequency?: number) {
+  }  function releaseNote(keyName?: string, noteFrequency?: number) {
     const voiceKey = keyName || noteFrequency?.toString() || '';
     const voice = activeVoicesRef.current.get(voiceKey);
     
@@ -252,6 +271,19 @@ function App() {
       voice.isReleasing = true;
       applyADSR(voice, true);
       console.log(`Voice released: ${voiceKey}`);
+    } else if (voice && voice.isReleasing) {
+      // Si la voz ya está en release, acelerar el proceso
+      console.log(`Force stopping voice: ${voiceKey}`);
+      if (voice.cleanupTimeoutId) {
+        clearTimeout(voice.cleanupTimeoutId);
+      }
+      cleanupVoice(voice);
+      activeVoicesRef.current.delete(voiceKey);
+      setActiveKeys(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(voiceKey);
+        return newSet;
+      });
     }
   }
 
@@ -376,13 +408,18 @@ function App() {
                   className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
                 />
                 <div className="text-xs text-zinc-400 text-center">{gainValue.toFixed(3)}</div>
-              </div>
-
-              <button
+              </div>              <button
                 className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
                 onClick={initializeAudio}
               >
                 🎵 Initialize Audio Context
+              </button>
+              
+              <button
+                className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold py-2 px-4 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
+                onClick={stopAllVoices}
+              >
+                🛑 Stop All Voices
               </button>
             </div>
           </div>

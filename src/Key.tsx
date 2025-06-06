@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 interface KeyProps {
   keyName: string;
   isBlack?: boolean;
@@ -7,34 +9,78 @@ interface KeyProps {
 }
 
 function Key({ keyName, isBlack = false, frequency, onPress, onRelease }: KeyProps) {
+  const isPressedRef = useRef(false);
+  const touchIdRef = useRef<number | null>(null);
+
+  const handlePress = () => {
+    if (!isPressedRef.current) {
+      isPressedRef.current = true;
+      onPress(frequency, keyName);
+    }
+  };
+
+  const handleRelease = () => {
+    if (isPressedRef.current) {
+      isPressedRef.current = false;
+      touchIdRef.current = null;
+      onRelease(keyName);
+    }
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
     e.preventDefault(); // Prevenir scroll y zoom
-    onPress(frequency, keyName);
+    
+    // Solo manejar el primer toque
+    if (touchIdRef.current === null && e.touches.length > 0) {
+      touchIdRef.current = e.touches[0].identifier;
+      handlePress();
+    }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     e.preventDefault(); // Prevenir scroll y zoom
-    onRelease(keyName);
+    
+    // Solo procesar si es el toque que estamos rastreando
+    const releaseTouch = Array.from(e.changedTouches).find(
+      touch => touch.identifier === touchIdRef.current
+    );
+    
+    if (releaseTouch) {
+      handleRelease();
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    onPress(frequency, keyName);
+    // Solo procesar click izquierdo
+    if (e.button === 0) {
+      handlePress();
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
     e.preventDefault();
-    onRelease(keyName);
+    if (e.button === 0) {
+      handleRelease();
+    }
   };
 
   // Manejar cuando el usuario mueve el dedo fuera de la tecla
   const handleTouchCancel = (e: React.TouchEvent) => {
     e.preventDefault();
-    onRelease(keyName);
+    
+    // Solo procesar si es el toque que estamos rastreando
+    const cancelledTouch = Array.from(e.changedTouches).find(
+      touch => touch.identifier === touchIdRef.current
+    );
+    
+    if (cancelledTouch) {
+      handleRelease();
+    }
   };
 
   const handleMouseLeave = () => {
-    onRelease(keyName);
+    handleRelease();
   };
 
   if (isBlack) {
