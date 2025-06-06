@@ -9,7 +9,7 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
   const [decay, setDecay] = useState(0);
   const [sustain, setSustain] = useState(0);
   const [release, setRelease] = useState(0);
-  const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
+  //const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
 
   // Referencias para mantener los nodos de audio estables
   const audioContextRef = useRef<AudioContext | null>(null);
