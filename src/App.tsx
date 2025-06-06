@@ -344,7 +344,7 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
           </div>
         </div>
           <div className="mt-4 text-center text-zinc-400 text-sm">
-          Toca las teclas para reproducir las notas • Optimizado para móvil
+          Lots of things not working yet, sustain and decay, fine tuning, midi still not implemented, im on it!
         </div>
       </div>
       <div>
