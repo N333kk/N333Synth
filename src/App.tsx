@@ -72,9 +72,7 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
       document.removeEventListener('touchstart', handleFirstInteraction);
       document.removeEventListener('click', handleFirstInteraction);
     };
-  }, []);
-
-  // Actualizar el gain cada vez que gainValue cambie
+  }, []);  // Actualizar el gain cada vez que gainValue cambie
   useEffect(() => {
     if (gainNodeRef.current) {
       gainNodeRef.current.gain.value = gainValue;
@@ -249,22 +247,25 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
             <h3 className="text-white text-lg font-semibold mb-4 flex items-center">
               <span className="w-3 h-3 bg-orange-500 rounded-full mr-3"></span>
               Tuning
-            </h3>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="octave" className="text-zinc-300 text-sm font-medium block">
+            </h3>            <div className="space-y-4">              <div className="space-y-2">
+                <label className="text-zinc-300 text-sm font-medium block">
                   Octave
                 </label>
-                <input
-                  type="number"
-                  name="octave"
-                  id="octave"
-                  onChange={(e) => setOctave(parseInt(e.target.value))}
-                  min="0"
-                  step="1"
-                  value={octave}
-                  className="w-full bg-zinc-700 border border-zinc-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                />
+                <div className="flex gap-1 bg-zinc-700 border border-zinc-600 rounded-lg p-1">
+                  {[0, 1, 2, 3, 4, 5].map((octNum) => (
+                    <button
+                      key={octNum}
+                      onClick={() => setOctave(octNum)}
+                      className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-all duration-200 ${
+                        octave === octNum
+                          ? 'bg-orange-500 text-white shadow-lg transform scale-105'
+                          : 'bg-transparent text-zinc-300 hover:bg-zinc-600 hover:text-white'
+                      }`}
+                    >
+                      {octNum}
+                    </button>
+                  ))}
+                </div>
               </div>
               
               <div className="space-y-2">
@@ -285,8 +286,7 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
           </div>
         </div>
       </div>      {/* Piano Roll */}
-      <div className="mt-4 sm:mt-8 bg-zinc-900 border border-zinc-700 p-4 sm:p-6 rounded-2xl shadow-2xl max-w-6xl mx-auto">
-        <h3 className="text-white text-lg font-semibold mb-4 sm:mb-6 flex items-center">
+      <div className="mt-4 sm:mt-8 bg-zinc-900 border border-zinc-700 p-4 sm:p-6 rounded-2xl shadow-2xl max-w-6xl mx-auto">        <h3 className="text-white text-lg font-semibold mb-4 sm:mb-6 flex items-center">
           <span className="w-3 h-3 bg-purple-500 rounded-full mr-3"></span>
           Piano Roll
         </h3>
@@ -301,10 +301,9 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
                 const whiteKeyMidiOffsets = [0, 2, 4, 5, 7, 9, 11];
                 const midiNumber = (octaveNum + 2) * 12 + whiteKeyMidiOffsets[i % 7];
                 const noteFrequency = 440 * Math.pow(2, (midiNumber - 69) / 12) + frequency;
-                
-                return (
+                  return (
                   <Key
-                    key={`white-${keyName}`}
+                    key={`white-${keyName}-oct${octave}-freq${frequency}`}
                     keyName={keyName}
                     frequency={noteFrequency}
                     onPress={playNote}
@@ -319,17 +318,15 @@ function App() {  const [gainValue, setGainValue] = useState(0.05);
               {Array.from({ length: 21 }, (_, i) => {
                 const whiteKeys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
                 const keyName = whiteKeys[i % 7];
-                const octaveNum = Math.floor(i / 7) + octave;
-                  if (!['C', 'D', 'F', 'G', 'A'].includes(keyName)) {
-                  return <div key={`spacer-${i}`} className="w-8 sm:w-12"></div>;
+                const octaveNum = Math.floor(i / 7) + octave;                  if (!['C', 'D', 'F', 'G', 'A'].includes(keyName)) {
+                  return <div key={`spacer-${i}-oct${octave}`} className="w-8 sm:w-12"></div>;
                 }
                 
                 const sharpNote = keyName + '#' + octaveNum;
                 const blackKeyOffsets = { 'C#': 1, 'D#': 3, 'F#': 6, 'G#': 8, 'A#': 10 };
                 const midiNumber = (octaveNum + 2) * 12 + blackKeyOffsets[keyName + '#' as keyof typeof blackKeyOffsets];
-                const noteFrequency = 440 * Math.pow(2, (midiNumber - 69) / 12) + frequency;
-                  return (
-                  <div key={`container-${i}`} className="relative w-8 sm:w-12">
+                const noteFrequency = 440 * Math.pow(2, (midiNumber - 69) / 12) + frequency;                  return (
+                  <div key={`container-${i}-oct${octave}-freq${frequency}`} className="relative w-8 sm:w-12">
                     <Key
                       keyName={sharpNote}
                       isBlack={true}

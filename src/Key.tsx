@@ -38,8 +38,7 @@ function Key({ keyName, isBlack = false, frequency, onPress, onRelease }: KeyPro
   };
 
   if (isBlack) {
-    return (
-      <button
+    return (      <button
         className="absolute bg-gray-900 hover:bg-gray-800 active:bg-gray-700 text-white font-medium w-6 h-16 sm:w-8 sm:h-20 -ml-3 sm:-ml-4 z-10 transition-all duration-75 active:scale-95 shadow-lg rounded-b-md touch-manipulation select-none"
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
@@ -56,8 +55,7 @@ function Key({ keyName, isBlack = false, frequency, onPress, onRelease }: KeyPro
     );
   }
 
-  return (
-    <button
+  return (    <button
       className="bg-white rounded-b-xl hover:bg-gray-100 active:bg-gray-200 border border-gray-300 text-black font-medium w-8 h-24 sm:w-12 sm:h-32 relative transition-all duration-75 active:scale-95 shadow-md touch-manipulation select-none"
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
