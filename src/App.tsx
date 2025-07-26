@@ -20,7 +20,7 @@ function App() {
   const [detune1, setDetune1] = useState(0);
   const [detune2, setDetune2] = useState(0);
   const [waveform2, setWaveform2] = useState<OscillatorType>("square");
-  const [frequency, setFrequency] = useState(0); // For Fine Tuning
+  const [frequency] = useState(0); // For Fine Tuning
   const [attack, setAttack] = useState(0.1);
   const [decay, setDecay] = useState(0.3);
   const [sustain, setSustain] = useState(0.7);
