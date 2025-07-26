@@ -15,3 +15,5 @@ I still have to implement Midi capabilities and Mono compatibility.
 Later versions will also have a working step sequencer and the possibility to extract the sound from the browser.
 
 Check it out [HERE](https://n333synth-nekks-projects.vercel.app/)
+
+<img width="1024" height="917" alt="Captura de pantalla 2025-07-26 134858" src="https://github.com/user-attachments/assets/30b273a4-4911-44dd-a15d-016ba4a2f8fe" />
