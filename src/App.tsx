@@ -14,6 +14,8 @@ interface Voice {
 }
 
 function App() {
+  const [osc1Toggle, setOsc1Toggle] = useState(true);
+  const [osc2Toggle, setOsc2Toggle] = useState(false);
   const [gainValue, setGainValue] = useState(0.05);
   const [octave, setOctave] = useState(0);
   const [waveform1, setWaveform1] = useState<OscillatorType>("square");
@@ -21,10 +23,10 @@ function App() {
   const [detune2, setDetune2] = useState(0);
   const [waveform2, setWaveform2] = useState<OscillatorType>("square");
   const [frequency] = useState(0); // For Fine Tuning
-  const [attack, setAttack] = useState(0.1);
-  const [decay, setDecay] = useState(0.3);
-  const [sustain, setSustain] = useState(0.7);
-  const [release, setRelease] = useState(0.5);
+  const [attack, setAttack] = useState(0.05);
+  const [decay, setDecay] = useState(0.250);
+  const [sustain, setSustain] = useState(1);
+  const [release, setRelease] = useState(0.8);
   const [activeKeys, setActiveKeys] = useState<Set<string>>(new Set()); // Para feedback visual
   const [isMonophonic, setIsMonophonic] = useState(false); // Nuevo estado para modo monofónico
 
@@ -54,6 +56,13 @@ function App() {
   const frequencyRef = useRef(frequency);
   const isMonophonicRef = useRef(isMonophonic);
 
+  function oscToggleHandler(oscToggle: boolean, setOscToggle: React.Dispatch<React.SetStateAction<boolean>>) {
+    if (oscToggle) {
+      setOscToggle(false);
+    } else {
+      setOscToggle(true);
+    }
+  }
   // Actualizar las referencias cuando cambien los valores
   useEffect(() => {
     waveform1Ref.current = waveform1;
@@ -66,7 +75,18 @@ function App() {
     releaseRef.current = release;
     frequencyRef.current = frequency;
     isMonophonicRef.current = isMonophonic;
-  }, [waveform1, waveform2, detune1, detune2, attack, decay, sustain, release, frequency, isMonophonic]);
+  }, [
+    waveform1,
+    waveform2,
+    detune1,
+    detune2,
+    attack,
+    decay,
+    sustain,
+    release,
+    frequency,
+    isMonophonic,
+  ]);
 
   // Función para limpiar una voz (usando useCallback para evitar recreación)
   const cleanupVoice = useCallback((voice: Voice) => {
@@ -104,7 +124,9 @@ function App() {
     activeVoicesRef.current.clear();
     activeMidiKeysRef.current.clear(); // Limpiar estado de teclas MIDI
     setActiveKeys(new Set());
-  }; // Inicializar el contexto de audio una sola vez
+  }; 
+  
+  // Inicializar el contexto de audio una sola vez
   useEffect(() => {
     const initAudio = () => {
       const ctx = new AudioContext();
@@ -121,69 +143,85 @@ function App() {
     };
 
     const initMidi = () => {
-    navigator.requestMIDIAccess().then((midiAccess) => {
-      console.log("MIDI Access granted", midiAccess);
-      console.log("MIDI Inputs:", midiAccess.inputs);
-      console.log("MIDI Outputs:", midiAccess.outputs);
-      midiAccess.inputs.forEach((input) => {
-        input.onmidimessage = (message) => {
-          const data = message.data;
+      navigator.requestMIDIAccess().then((midiAccess) => {
+        console.log("MIDI Access granted", midiAccess);
+        console.log("MIDI Inputs:", midiAccess.inputs);
+        console.log("MIDI Outputs:", midiAccess.outputs);
+        midiAccess.inputs.forEach((input) => {
+          input.onmidimessage = (message) => {
+            const data = message.data;
 
-          // Verificar que data no sea null
-          if (!data || data.length < 1) {
-            return; // Ignorar mensajes vacíos o null
-          }
-
-          // Ignorar MIDI Clock y otros mensajes de timing
-          if (
-            data[0] === 248 || // MIDI Clock (248)
-            data[0] === 0xfa || // Start (250)
-            data[0] === 0xfb || // Continue (251)
-            data[0] === 0xfc || // Stop (252)
-            data[0] === 0xfe || // Active Sensing (254)
-            data[0] === 0xff
-          ) {
-            // System Reset (255)
-            return; // Ignorar estos mensajes
-          }
-
-          // Si es un mensaje de nota encendida
-          if (data[0] === 144) {
-            const noteNumber = data[1];
-            const velocity = data[2];
-
-            // Solo procesar si velocity > 0 (note on real) y la tecla no está ya presionada
-            if (velocity > 0 && !activeMidiKeysRef.current.has(noteNumber)) {
-              // Marcar la tecla como presionada
-              activeMidiKeysRef.current.add(noteNumber);
-              
-              // Tocar la nota
-              console.log(`Note On: ${noteNumber} (Velocity: ${velocity})`);
-              const noteFrequency = midiMapRef.current![noteNumber].frequency + frequencyRef.current; // Aplicar fine tuning
-              playNote(noteFrequency, midiMapRef.current![noteNumber].keyName);
-            } else if (velocity === 0 && activeMidiKeysRef.current.has(noteNumber)) {
-              // velocity = 0 en note on equivale a note off
-              activeMidiKeysRef.current.delete(noteNumber);
-              releaseNote(midiMapRef.current![noteNumber].keyName, midiMapRef.current![noteNumber].frequency + frequencyRef.current);
+            // Verificar que data no sea null
+            if (!data || data.length < 1) {
+              return; // Ignorar mensajes vacíos o null
             }
-          }
 
-          // Note off message (canal 1)
-          if (data[0] === 128) {
-            const noteNumber = data[1];
-
-            // Solo procesar si la tecla está actualmente presionada
-            if (activeMidiKeysRef.current.has(noteNumber)) {
-              activeMidiKeysRef.current.delete(noteNumber);
-              releaseNote(midiMapRef.current![noteNumber].keyName, midiMapRef.current![noteNumber].frequency + frequencyRef.current);
+            // Ignorar MIDI Clock y otros mensajes de timing
+            if (
+              data[0] === 248 || // MIDI Clock (248)
+              data[0] === 0xfa || // Start (250)
+              data[0] === 0xfb || // Continue (251)
+              data[0] === 0xfc || // Stop (252)
+              data[0] === 0xfe || // Active Sensing (254)
+              data[0] === 0xff
+            ) {
+              // System Reset (255)
+              return; // Ignorar estos mensajes
             }
-          }
-        };
+
+            // Si es un mensaje de nota encendida
+            if (data[0] === 144) {
+              const noteNumber = data[1];
+              const velocity = data[2];
+
+              // Solo procesar si velocity > 0 (note on real) y la tecla no está ya presionada
+              if (velocity > 0 && !activeMidiKeysRef.current.has(noteNumber)) {
+                // Marcar la tecla como presionada
+                activeMidiKeysRef.current.add(noteNumber);
+
+                // Tocar la nota
+                console.log(`Note On: ${noteNumber} (Velocity: ${velocity})`);
+                const noteFrequency =
+                  midiMapRef.current![noteNumber].frequency +
+                  frequencyRef.current; // Aplicar fine tuning
+                playNote(
+                  noteFrequency,
+                  midiMapRef.current![noteNumber].keyName
+                );
+              } else if (
+                velocity === 0 &&
+                activeMidiKeysRef.current.has(noteNumber)
+              ) {
+                // velocity = 0 en note on equivale a note off
+                activeMidiKeysRef.current.delete(noteNumber);
+                releaseNote(
+                  midiMapRef.current![noteNumber].keyName,
+                  midiMapRef.current![noteNumber].frequency +
+                    frequencyRef.current
+                );
+              }
+            }
+
+            // Note off message (canal 1)
+            if (data[0] === 128) {
+              const noteNumber = data[1];
+
+              // Solo procesar si la tecla está actualmente presionada
+              if (activeMidiKeysRef.current.has(noteNumber)) {
+                activeMidiKeysRef.current.delete(noteNumber);
+                releaseNote(
+                  midiMapRef.current![noteNumber].keyName,
+                  midiMapRef.current![noteNumber].frequency +
+                    frequencyRef.current
+                );
+              }
+            }
+          };
+        });
       });
-    });
-  };
+    };
 
-  initMidi();
+    initMidi();
 
     // Inicializar inmediatamente
     initAudio();
@@ -232,17 +270,43 @@ function App() {
 
   // Función para convertir número MIDI a nombre de nota
   const midiToNoteName = (midiNumber: number): string => {
-    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const noteNames = [
+      "C",
+      "C#",
+      "D",
+      "D#",
+      "E",
+      "F",
+      "F#",
+      "G",
+      "G#",
+      "A",
+      "A#",
+      "B",
+    ];
     const octave = Math.floor(midiNumber / 12) - 1;
     const note = noteNames[midiNumber % 12];
     return `${note}${octave}`;
   };
 
   // Crear el midiMap estático una sola vez
-  const midiMapRef = useRef<{ midiNumber: number; frequency: number; midiKeyName: string; keyName: string }[]>();
-  
+  const midiMapRef =
+    useRef<
+      {
+        midiNumber: number;
+        frequency: number;
+        midiKeyName: string;
+        keyName: string;
+      }[]
+    >();
+
   if (!midiMapRef.current) {
-    const midiMap: { midiNumber: number; frequency: number; midiKeyName: string; keyName: string }[] = [];
+    const midiMap: {
+      midiNumber: number;
+      frequency: number;
+      midiKeyName: string;
+      keyName: string;
+    }[] = [];
     for (let i = 0; i < 128; i++) {
       const noteFrequency = 440 * Math.pow(2, (i - 69) / 12);
       midiMap.push({
@@ -263,42 +327,94 @@ function App() {
 
     const ctx = audioContextRef.current;
 
-    // Crear dos oscilladores para esta voz (para que suene más rico)
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
+    // Creamos osciladores dependiendo de los toggles
+    if (!osc1Toggle && !osc2Toggle) {
+      return {
+        oscillators: [],
+        gainNode: ctx.createGain(),
+        frequency: noteFrequency,
+        keyName,
+        isReleasing: false,
+        startTime: ctx.currentTime,
+      };
+    } else if (!osc1Toggle) {
+      const osc = ctx.createOscillator();
+      osc.type = waveform2Ref.current;
+      osc.frequency.value = noteFrequency;
+      osc.detune.value = detune2Ref.current;
 
-    // Crear gain node para esta voz específica
-    const voiceGain = ctx.createGain();
+      const voiceGain = ctx.createGain();
+      osc.connect(voiceGain);
+      voiceGain.connect(masterGainNodeRef.current);
 
-    // Configurar oscilladores con los valores ACTUALES usando las referencias
-    osc1.type = waveform1Ref.current;
-    osc2.type = waveform2Ref.current;
-    osc1.frequency.value = noteFrequency;
-    osc2.frequency.value = noteFrequency;
+      voiceGain.gain.value = 0; // Inicializar gain en 0
 
-    // Detuning para sonido más rico con los valores ACTUALES usando las referencias
-    osc1.detune.value = detune1Ref.current;
-    osc2.detune.value = detune2Ref.current;
+      return {
+        oscillators: [osc],
+        gainNode: voiceGain,
+        frequency: noteFrequency,
+        keyName,
+        isReleasing: false,
+        startTime: ctx.currentTime,
+      };
+    } else if (!osc2Toggle) {
+      const osc = ctx.createOscillator();
+      osc.type = waveform1Ref.current;
+      osc.frequency.value = noteFrequency;
+      osc.detune.value = detune1Ref.current;
 
-    // Conectar oscilladores al gain de la voz
-    osc1.connect(voiceGain);
-    osc2.connect(voiceGain);
+      const voiceGain = ctx.createGain();
+      osc.connect(voiceGain);
+      voiceGain.connect(masterGainNodeRef.current);
 
-    // Conectar el gain de la voz al master gain
-    voiceGain.connect(masterGainNodeRef.current);
+      voiceGain.gain.value = 0; // Inicializar gain en 0
 
-    // Inicializar el gain en 0 para el envelope
-    voiceGain.gain.value = 0;
+      return {
+        oscillators: [osc],
+        gainNode: voiceGain,
+        frequency: noteFrequency,
+        keyName,
+        isReleasing: false,
+        startTime: ctx.currentTime,
+      };
+    } else {
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
 
-    return {
-      oscillators: [osc1, osc2],
-      gainNode: voiceGain,
-      frequency: noteFrequency,
-      keyName,
-      isReleasing: false,
-      startTime: ctx.currentTime,
-    };
+      // Crear gain node para esta voz específica
+      const voiceGain = ctx.createGain();
+
+      // Configurar oscilladores con los valores ACTUALES usando las referencias
+      osc1.type = waveform1Ref.current;
+      osc2.type = waveform2Ref.current;
+      osc1.frequency.value = noteFrequency;
+      osc2.frequency.value = noteFrequency;
+
+      // Detuning para sonido más rico con los valores ACTUALES usando las referencias
+      osc1.detune.value = detune1Ref.current;
+      osc2.detune.value = detune2Ref.current;
+
+      // Conectar oscilladores al gain de la voz
+      osc1.connect(voiceGain);
+      osc2.connect(voiceGain);
+
+      // Conectar el gain de la voz al master gain
+      voiceGain.connect(masterGainNodeRef.current);
+
+      // Inicializar el gain en 0 para el envelope
+      voiceGain.gain.value = 0;
+
+      return {
+        oscillators: [osc1, osc2],
+        gainNode: voiceGain,
+        frequency: noteFrequency,
+        keyName,
+        isReleasing: false,
+        startTime: ctx.currentTime,
+      };
+    }
   };
+
   // Función para aplicar el envelope ADSR a una voz
   const applyADSR = (voice: Voice, isRelease: boolean = false) => {
     if (!audioContextRef.current) return;
@@ -316,7 +432,10 @@ function App() {
       // Fase de Release - usar el valor ACTUAL de release usando la referencia
       const currentGain = gainNode.gain.value;
       gainNode.gain.setValueAtTime(currentGain, currentTime);
-      gainNode.gain.linearRampToValueAtTime(0, currentTime + releaseRef.current);
+      gainNode.gain.linearRampToValueAtTime(
+        0,
+        currentTime + releaseRef.current
+      );
       // Programar la limpieza de la voz después del release
       const timeoutId = setTimeout(() => {
         // Verificar que la voz todavía existe antes de limpiarla
@@ -416,6 +535,7 @@ function App() {
       console.error("Error creating voice:", error);
     }
   }
+
   function releaseNote(keyName?: string, noteFrequency?: number) {
     const voiceKey = keyName || noteFrequency?.toString() || "";
     const voice = activeVoicesRef.current.get(voiceKey);
@@ -610,6 +730,27 @@ function App() {
               >
                 🛑 Stop All Voices
               </button>
+              <div className="flex items-center justify-start space-x-4">
+                <button 
+                  onClick={() => oscToggleHandler(osc1Toggle, setOsc1Toggle)} 
+                  className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                    osc1Toggle 
+                      ? "bg-green-400 shadow-md shadow-green-300/90" 
+                      : "bg-gray-400 hover:bg-gray-300"
+                  }`}
+                ></button>
+                <span className="text-white font-medium text-xs">Osc 1</span>
+
+                <button 
+                  onClick={() => oscToggleHandler(osc2Toggle, setOsc2Toggle)} 
+                  className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                    osc2Toggle 
+                      ? "bg-green-400 shadow-md shadow-green-300/90" 
+                      : "bg-gray-400 hover:bg-gray-300"
+                  }`}
+                ></button>
+                <span className="text-white font-medium text-xs">Osc 2</span>
+              </div>
             </div>
           </div>
 
