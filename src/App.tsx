@@ -566,7 +566,7 @@ function App() {
         {/* Header */}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            N333 Synth
+            W3Synth
           </h1>
           <p className="text-zinc-400 text-sm sm:text-base">
             WebSynth with Polyphony

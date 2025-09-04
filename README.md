@@ -1,4 +1,4 @@
-# N333Synth
+# W3Synth
 
 Web Synth made by me, using only React.
 
