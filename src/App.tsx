@@ -334,7 +334,7 @@ function App() {
     const ctx = audioContextRef.current;
 
     // Creamos osciladores dependiendo de los toggles
-    if (!osc1Toggle && !osc2Toggle) {
+    if (!osc1Ref.current && !osc2Ref.current) {
       return {
         oscillators: [],
         gainNode: ctx.createGain(),
@@ -343,7 +343,7 @@ function App() {
         isReleasing: false,
         startTime: ctx.currentTime,
       };
-    } else if (!osc1Toggle) {
+    } else if (!osc1Ref.current) {
       const osc = ctx.createOscillator();
       osc.type = waveform2Ref.current;
       osc.frequency.value = noteFrequency;
@@ -363,7 +363,7 @@ function App() {
         isReleasing: false,
         startTime: ctx.currentTime,
       };
-    } else if (!osc2Toggle) {
+    } else if (!osc2Ref.current) {
       const osc = ctx.createOscillator();
       osc.type = waveform1Ref.current;
       osc.frequency.value = noteFrequency;
