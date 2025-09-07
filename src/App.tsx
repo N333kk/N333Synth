@@ -47,6 +47,8 @@ function App() {
   // Referencias para acceder a los valores actuales desde los event listeners
   const waveform1Ref = useRef(waveform1);
   const waveform2Ref = useRef(waveform2);
+  const osc1Ref = useRef(osc1Toggle);
+  const osc2Ref = useRef(osc2Toggle);
   const detune1Ref = useRef(detune1);
   const detune2Ref = useRef(detune2);
   const attackRef = useRef(attack);
@@ -67,6 +69,8 @@ function App() {
   useEffect(() => {
     waveform1Ref.current = waveform1;
     waveform2Ref.current = waveform2;
+    osc1Ref.current = osc1Toggle;
+    osc2Ref.current = osc2Toggle;
     detune1Ref.current = detune1;
     detune2Ref.current = detune2;
     attackRef.current = attack;
@@ -78,6 +82,8 @@ function App() {
   }, [
     waveform1,
     waveform2,
+    osc1Toggle,
+    osc2Toggle,
     detune1,
     detune2,
     attack,
