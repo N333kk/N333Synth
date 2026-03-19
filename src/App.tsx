@@ -965,7 +965,7 @@ function App() {
 
         <div>
           <p className="text-center text-zinc-500 text-xs mt-4">
-            Made with ❤️ by <a href="https://github.com/N333kk">N333KK</a>
+            Made with ❤️ by <a href="https://nekk.it">N333KK</a>
           </p>
         </div>
       </div>
